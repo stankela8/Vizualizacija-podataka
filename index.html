@@ -1,0 +1,239 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CO2 Emisije u Europi</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    #container {
+      padding: 20px;
+      display: flex;
+      gap: 30px;
+      flex-direction: row;
+    }
+    svg {
+      background-color: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 8px;
+    }
+    .tooltip {
+      position: absolute;
+      text-align: left;
+      padding: 8px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      pointer-events: none;
+      font-size: 12px;
+    }
+    #filters, .chart-container {
+      width: 100%;
+    }
+    .chart-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .chart-container select{
+      display: flex;
+      gap: 16px;
+      width: 80px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div>
+      <h1>Vizualizacija CO₂ emisija u Europi</h1>
+      <div id="map"></div>
+      <div id="filters">
+        <label for="yearSelect">Godina:</label>
+        <select id="yearSelect"></select>
+      </div>
+    </div>
+    <div class="chart-container">
+      <h2>Trend emisija CO₂ po državi</h2>
+      <div id="selektovi">
+      <label for="countryLine1" >Država 1:</label>
+      <select id="countryLine1"></select>
+      <label for="countryLine2">Država 2:</label>
+      <select id="countryLine2"></select>
+      </div>
+      <svg id="lineChart" width="1200" height="550"></svg>
+    </div>
+  </div>
+  <script>
+    const width = 1200;
+    const height = 650;
+
+    const svgMap = d3.select("#map").append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+    const svgLine = d3.select("#lineChart");
+    const tooltip = d3.select("body").append("div")
+      .attr("class", "tooltip").style("opacity", 0);
+
+    const projection = d3.geoMercator()
+      .center([20, 55]).scale(500).translate([width / 2, height / 2]);
+    const path = d3.geoPath().projection(projection);
+
+    const nameMap = {
+      "Czech Republic": "Czechia",
+      "Republic of Moldova": "Moldova",
+      "The former Yugoslav Republic of Macedonia": "North Macedonia",
+      "Holy See (Vatican City)": "Vatican"
+    };
+
+    let geoDataGlobal, co2DataGlobal, colorScaleGlobal, co2ByCountry = {};
+
+    function updateMap(selectedYear) {
+      const europeData = co2DataGlobal.filter(d =>
+        +d.year === selectedYear && d.country && !isNaN(+d.co2)
+      );
+      co2ByCountry = {};
+      europeData.forEach(d => co2ByCountry[d.country] = +d.co2);
+
+      const maxCo2 = d3.max(Object.values(co2ByCountry));
+      colorScaleGlobal = d3.scalePow().exponent(0.5)
+        .domain([0, maxCo2]).range(["#fee5d9", "#a50f15"]);
+
+      svgMap.selectAll("path.country")
+        .data(geoDataGlobal.features, d => nameMap[d.properties.NAME] || d.properties.NAME)
+        .join(
+          enter => enter.append("path")
+            .attr("class", "country")
+            .attr("d", path)
+            .attr("stroke", "#999")
+            .on("mouseover", handleMouseOver)
+            .on("mouseout", handleMouseOut)
+            .on("click", handleClick),
+          update => update.transition().duration(500)
+            .attr("fill", d => {
+              const name = nameMap[d.properties.NAME] || d.properties.NAME;
+              const val = co2ByCountry[name];
+              return val ? colorScaleGlobal(val) : "#eee";
+            })
+        )
+        .attr("fill", d => {
+          const name = nameMap[d.properties.NAME] || d.properties.NAME;
+          const val = co2ByCountry[name];
+          return val ? colorScaleGlobal(val) : "#eee";
+        })
+        .on("mouseover", handleMouseOver)
+        .on("mouseout", handleMouseOut)
+        .on("click", handleClick);
+    }
+
+    function handleMouseOver(event, d) {
+      const name = nameMap[d.properties.NAME] || d.properties.NAME;
+      const value = co2ByCountry[name];
+      tooltip.transition().duration(200).style("opacity", .9);
+      tooltip.html(`<strong>${name}</strong><br>CO₂: ${value ? value.toFixed(2) + ' Mt' : 'n/a'}`)
+        .style("left", (event.pageX + 5) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    }
+
+    function handleMouseOut() {
+      tooltip.transition().duration(500).style("opacity", 0);
+    }
+
+    function handleClick(event, d) {
+      const name = nameMap[d.properties.NAME] || d.properties.NAME;
+      d3.select("#countryLine1").property("value", name);
+      updateLineChart(name, d3.select("#countryLine2").property("value"));
+    }
+
+    function updateLineChart(c1, c2) {
+      const margin = { top: 20, right: 80, bottom: 40, left: 60 };
+      const w = +svgLine.attr("width") - margin.left - margin.right;
+      const h = +svgLine.attr("height") - margin.top - margin.bottom;
+      svgLine.selectAll("g").remove();
+      const g = svgLine.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const countries = [c1, c2].filter(Boolean);
+      const data = countries.map(country => ({
+        country,
+        values: co2DataGlobal.filter(d => d.country === country && !isNaN(+d.co2))
+          .filter(d => +d.year >= 1990).map(d => ({ year: +d.year, co2: +d.co2 }))
+      }));
+
+      const x = d3.scaleLinear().domain([1990, 2022]).range([0, w]);
+      const yMax = d3.max(data, d => d3.max(d.values, v => v.co2));
+      const yMin = d3.min(data, d => d3.min(d.values, v => v.co2));
+      const y = d3.scaleLinear().domain([0, yMax * 1.1]).nice().range([h, 0]);
+
+      const line = d3.line().x(d => x(d.year)).y(d => y(d.co2));
+
+      g.append("g").attr("transform", `translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d3.format("d")));
+      g.append("g").call(d3.axisLeft(y));
+
+      const colors = ["steelblue", "darkred"];
+      data.forEach((series, i) => {
+        g.append("path")
+          .datum(series.values)
+          .attr("fill", "none")
+          .attr("stroke", colors[i])
+          .attr("stroke-width", 2)
+          .attr("d", line);
+
+        g.selectAll("circle.series" + i)
+          .data(series.values)
+          .enter()
+          .append("circle")
+          .attr("class", "series" + i)
+          .attr("cx", d => x(d.year))
+          .attr("cy", d => y(d.co2))
+          .attr("r", 3)
+          .attr("fill", colors[i])
+          .on("mouseover", (event, d) => {
+            tooltip.transition().duration(200).style("opacity", .9);
+            tooltip.html(`<strong>${series.country}</strong><br>${d.year}: ${d.co2.toFixed(2)} Mt`)
+              .style("left", (event.pageX + 5) + "px")
+              .style("top", (event.pageY - 28) + "px");
+          })
+          .on("mouseout", () => tooltip.transition().duration(500).style("opacity", 0));
+      });
+    }
+
+    Promise.all([
+      d3.json("geo/europe.geojson"),
+      d3.csv("data/owid-co2-data.csv")
+    ]).then(([geoData, co2Data]) => {
+      geoDataGlobal = geoData;
+      co2DataGlobal = co2Data;
+
+      const europeanCountries = geoData.features.map(d => nameMap[d.properties.NAME] || d.properties.NAME);
+      const validYears = Array.from(new Set(co2Data.map(d => +d.year))).filter(y => y >= 1990 && y <= 2022).sort((a,b)=>a-b);
+
+      const yearSelect = d3.select("#yearSelect");
+      const countryLine1 = d3.select("#countryLine1");
+      const countryLine2 = d3.select("#countryLine2");
+
+      validYears.forEach(y => yearSelect.append("option").attr("value", y).text(y));
+      europeanCountries.sort().forEach(c => {
+        countryLine1.append("option").attr("value", c).text(c);
+        countryLine2.append("option").attr("value", c).text(c);
+      });
+
+      const defaultYear = 2010;
+      yearSelect.property("value", defaultYear);
+      updateMap(defaultYear);
+
+      yearSelect.on("change", function () {
+        updateMap(+this.value);
+      });
+
+      countryLine1.on("change", () => updateLineChart(countryLine1.property("value"), countryLine2.property("value")));
+      countryLine2.on("change", () => updateLineChart(countryLine1.property("value"), countryLine2.property("value")));
+    });
+  </script>
+</body>
+</html>
