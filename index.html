@@ -1,8 +1,8 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CO2 Emisije u Europi</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
@@ -10,18 +10,32 @@
       font-family: Arial, sans-serif;
       background-color: #f4f4f4;
       margin: 0;
-      padding: 0;
-    }
-    #container {
       padding: 20px;
-      display: flex;
-      gap: 30px;
-      flex-direction: row;
     }
-    svg {
+    h1, h2 {
+      color: #333;
+      margin-top: 0;
+      text-align: center;
+    }
+    .row {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      flex-wrap: wrap;
+      margin-bottom: 30px;
+    }
+    .chart-box {
+      flex: 1 1 45%;
+      max-width: 900px;
       background-color: white;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
       border-radius: 8px;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .svg-container {
+      width: 100%;
+      height: 550px;
     }
     .tooltip {
       position: absolute;
@@ -31,59 +45,135 @@
       border: 1px solid #ccc;
       border-radius: 4px;
       pointer-events: none;
-      font-size: 12px;
+      font-size: 15px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
     }
-    #filters, .chart-container {
-      width: 100%;
-    }
-    .chart-container {
+    #filters {
+      margin-bottom: 20px;
       display: flex;
-      flex-direction: column;
-      gap: 16px;
+      gap: 15px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
     }
-    .chart-container select{
+    select {
+      padding: 5px 10px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    .basic-comparison-container {
       display: flex;
-      gap: 16px;
-      width: 80px;
+      gap: 40px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .basic-box {
+      background: #f8f9fa;
+      border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.07);
+      padding: 24px 32px;
+      min-width: 280px;
+      flex: 1;
+      max-width: 400px;
+    }
+    .param-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 17px;
+    }
+    .param-row .param-label {
+      color: #555;
+    }
+    .param-row .param-value {
+      font-weight: bold;
+      color: #222;
+    }
+    .zoom-controls {
+      margin-bottom: 10px;
+    }
+    .zoom-btn {
+      display: inline-block;
+      margin-right: 5px;
+      background: #e0e0e0;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #play-animation {
+      padding: 5px 15px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #play-animation:hover {
+      background: #45a049;
+    }
+    #year-display {
+      font-weight: bold;
+      font-size: 18px;
+      min-width: 50px;
+      text-align: center;
     }
   </style>
 </head>
 <body>
-  <div id="container">
-    <div>
-      <h1>Vizualizacija CO₂ emisija u Europi</h1>
-      <div id="map"></div>
-      <div id="filters">
-        <label for="yearSelect">Godina:</label>
-        <select id="yearSelect"></select>
+  <h1>Vizualizacija CO₂ emisija u Europi</h1>
+  <div id="filters">
+    <label for="yearSelect">Godina:</label>
+    <select id="yearSelect"></select>
+    <button id="play-animation">Pokreni animaciju</button>
+    <div id="year-display">2020</div>
+  </div>
+
+  <div class="row">
+    <div class="chart-box">
+      <div class="zoom-controls">
+        <button class="zoom-btn" id="zoom-in">+</button>
+        <button class="zoom-btn" id="zoom-out">-</button>
+        <button class="zoom-btn" id="zoom-reset">Reset</button>
       </div>
+      <svg id="map" class="svg-container"></svg>
     </div>
-    <div class="chart-container">
+    <div class="chart-box">
       <h2>Trend emisija CO₂ po državi</h2>
-      <div id="selektovi">
-      <label for="countryLine1" >Država 1:</label>
+      <label for="countryLine1">Država 1:</label>
       <select id="countryLine1"></select>
       <label for="countryLine2">Država 2:</label>
       <select id="countryLine2"></select>
-      </div>
-      <svg id="lineChart" width="1200" height="550"></svg>
+      <svg id="lineChart" class="svg-container"></svg>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="chart-box">
+      <h2>Top 5 emitera CO₂ u odabranoj godini</h2>
+      <svg id="barChart" class="svg-container"></svg>
+    </div>
+    <div class="chart-box">
+      <h2>Osnovni podaci za odabrane države</h2>
+      <div class="basic-comparison-container" id="basicComparison"></div>
     </div>
   </div>
   <script>
-    const width = 1200;
-    const height = 650;
+    const width = 900;
+    const height = 550;
 
-    const svgMap = d3.select("#map").append("svg")
-      .attr("width", width)
-      .attr("height", height);
+    const svgMap = d3.select("#map");
+    const legendContainer = svgMap.append("g")
+      .attr("class", "legend-container")
+      .attr("transform", `translate(${width - 160}, 20)`);
 
     const svgLine = d3.select("#lineChart");
     const tooltip = d3.select("body").append("div")
       .attr("class", "tooltip").style("opacity", 0);
 
-    const projection = d3.geoMercator()
-      .center([20, 55]).scale(500).translate([width / 2, height / 2]);
-    const path = d3.geoPath().projection(projection);
+    let projection = d3.geoMercator()
+      .center([20, 55]).scale(480).translate([width / 2, height / 2]);
+    let path = d3.geoPath().projection(projection);
 
     const nameMap = {
       "Czech Republic": "Czechia",
@@ -93,6 +183,34 @@
     };
 
     let geoDataGlobal, co2DataGlobal, colorScaleGlobal, co2ByCountry = {};
+    let europeanCountries = [];
+    let zoom = d3.zoom().scaleExtent([1, 8]).on("zoom", zoomed);
+    let animationInterval = null;
+    let isAnimating = false;
+
+    svgMap.call(zoom);
+
+    const basicParams = [
+      {key: "population", label: "Populacija"},
+      {key: "gdp", label: "BDP (USD)"},
+      {key: "co2", label: "CO₂ emisije (Mt)"},
+      {key: "energy_per_capita", label: "Energija po osobi (kWh)"},
+      {key: "consumption_co2", label: "Potrošnja CO₂ (Mt)"},
+      {key: "gas_co2", label: "Emisija CO₂ iz plina (Mt)"},
+      {key: "share_global_co2", label: "Udio globane godišnje emisije CO₂ (%)"}
+    ];
+
+    function zoomed(event) {
+      const {transform} = event;
+      svgMap.selectAll("path.country").attr("transform", transform);
+    }
+
+    function resetZoom() {
+      svgMap.transition().duration(750).call(
+        zoom.transform,
+        d3.zoomIdentity
+      );
+    }
 
     function updateMap(selectedYear) {
       const europeData = co2DataGlobal.filter(d =>
@@ -102,8 +220,10 @@
       europeData.forEach(d => co2ByCountry[d.country] = +d.co2);
 
       const maxCo2 = d3.max(Object.values(co2ByCountry));
-      colorScaleGlobal = d3.scalePow().exponent(0.5)
-        .domain([0, maxCo2]).range(["#fee5d9", "#a50f15"]);
+      colorScaleGlobal = d3.scalePow()
+        .exponent(0.3) 
+        .domain([0, 3000]) 
+        .range(["#fff5f0", "#67000d"]);
 
       svgMap.selectAll("path.country")
         .data(geoDataGlobal.features, d => nameMap[d.properties.NAME] || d.properties.NAME)
@@ -111,7 +231,11 @@
           enter => enter.append("path")
             .attr("class", "country")
             .attr("d", path)
-            .attr("stroke", "#999")
+            .attr("fill", d => {
+              const name = nameMap[d.properties.NAME] || d.properties.NAME;
+              const val = co2ByCountry[name];
+              return val ? colorScaleGlobal(val) : "#eee";
+            })
             .on("mouseover", handleMouseOver)
             .on("mouseout", handleMouseOut)
             .on("click", handleClick),
@@ -121,16 +245,57 @@
               const val = co2ByCountry[name];
               return val ? colorScaleGlobal(val) : "#eee";
             })
-        )
-        .attr("fill", d => {
-          const name = nameMap[d.properties.NAME] || d.properties.NAME;
-          const val = co2ByCountry[name];
-          return val ? colorScaleGlobal(val) : "#eee";
-        })
-        .on("mouseover", handleMouseOver)
-        .on("mouseout", handleMouseOut)
-        .on("click", handleClick);
+        );
+
+      updateLegend();
+      updateBarChart(selectedYear);
+      updateBasicComparison();
+
+      d3.select("#year-display").text(selectedYear);
     }
+
+  function updateLegend() {
+  legendContainer.selectAll("*").remove();
+
+  
+  const gradient = legendContainer.append("defs").append("linearGradient")
+    .attr("id", "gradient")
+    .attr("x1", "0%").attr("y1", "100%")
+    .attr("x2", "0%").attr("y2", "0%");
+
+  gradient.append("stop")
+    .attr("offset", "0%")
+    .attr("stop-color", "#fff5f0"); 
+
+  gradient.append("stop")
+    .attr("offset", "100%")
+    .attr("stop-color", "#67000d"); 
+
+  legendContainer.append("rect")
+    .attr("width", 20)
+    .attr("height", 100)
+    .style("fill", "url(#gradient)");
+
+  const axisScale = d3.scaleLinear()
+    .domain([0, 3000])
+    .range([100, 0]);
+
+  const axis = d3.axisRight(axisScale)
+    .ticks(6)
+    .tickFormat(d => `${d} Mt`);
+
+  legendContainer.append("g")
+    .attr("transform", "translate(25, 0)")
+    .call(axis);
+
+  legendContainer.append("text")
+    .attr("x", 0)
+    .attr("y", -10)
+    .style("text-anchor", "start")
+    .style("font-size", "12px")
+    .style("font-weight", "bold")
+    .text("CO₂ emisije (Mt)");
+}
 
     function handleMouseOver(event, d) {
       const name = nameMap[d.properties.NAME] || d.properties.NAME;
@@ -149,13 +314,15 @@
       const name = nameMap[d.properties.NAME] || d.properties.NAME;
       d3.select("#countryLine1").property("value", name);
       updateLineChart(name, d3.select("#countryLine2").property("value"));
+      updateBasicComparison();
     }
 
     function updateLineChart(c1, c2) {
-      const margin = { top: 20, right: 80, bottom: 40, left: 60 };
-      const w = +svgLine.attr("width") - margin.left - margin.right;
-      const h = +svgLine.attr("height") - margin.top - margin.bottom;
-      svgLine.selectAll("g").remove();
+      const margin = { top: 60, right: 120, bottom: 80, left: 120 };
+      const w = width - margin.left - margin.right;
+      const h = height - margin.top - margin.bottom;
+      
+      svgLine.selectAll("*").remove();
       const g = svgLine.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
       const countries = [c1, c2].filter(Boolean);
@@ -167,31 +334,47 @@
 
       const x = d3.scaleLinear().domain([1990, 2022]).range([0, w]);
       const yMax = d3.max(data, d => d3.max(d.values, v => v.co2));
-      const yMin = d3.min(data, d => d3.min(d.values, v => v.co2));
       const y = d3.scaleLinear().domain([0, yMax * 1.1]).nice().range([h, 0]);
 
       const line = d3.line().x(d => x(d.year)).y(d => y(d.co2));
 
-      g.append("g").attr("transform", `translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d3.format("d")));
-      g.append("g").call(d3.axisLeft(y));
+      g.append("g")
+        .attr("transform", `translate(0,${h})`)
+        .call(d3.axisBottom(x).tickFormat(d3.format("d")))
+        .append("text")
+        .attr("x", w)
+        .attr("y", 50)
+        .attr("fill", "#000")
+        .style("text-anchor", "end")
+        .style("font-size", "16px")
+        .text("Godina");
 
-      const colors = ["steelblue", "darkred"];
+      g.append("g")
+        .call(d3.axisLeft(y))
+        .append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -70)
+        .attr("dy", "0.71em")
+        .attr("fill", "#000")
+        .style("text-anchor", "end")
+        .style("font-size", "16px")
+        .text("CO₂ emisije (Mt)");
+
+      const colors = ["#1f77b4", "#d62728"];
       data.forEach((series, i) => {
         g.append("path")
           .datum(series.values)
           .attr("fill", "none")
           .attr("stroke", colors[i])
-          .attr("stroke-width", 2)
+          .attr("stroke-width", 3)
           .attr("d", line);
-
-        g.selectAll("circle.series" + i)
+        g.selectAll(".dot-" + i)
           .data(series.values)
-          .enter()
-          .append("circle")
-          .attr("class", "series" + i)
+          .enter().append("circle")
+          .attr("class", "dot-" + i)
           .attr("cx", d => x(d.year))
           .attr("cy", d => y(d.co2))
-          .attr("r", 3)
+          .attr("r", 4)
           .attr("fill", colors[i])
           .on("mouseover", (event, d) => {
             tooltip.transition().duration(200).style("opacity", .9);
@@ -201,7 +384,177 @@
           })
           .on("mouseout", () => tooltip.transition().duration(500).style("opacity", 0));
       });
+
+      const legend = g.append("g")
+        .attr("transform", `translate(${w - 120}, 20)`);
+      data.forEach((series, i) => {
+        const legendItem = legend.append("g")
+          .attr("transform", `translate(0, ${i * 28})`);
+        legendItem.append("rect")
+          .attr("width", 20)
+          .attr("height", 5)
+          .attr("y", 9)
+          .attr("fill", colors[i]);
+        legendItem.append("text")
+          .attr("x", 28)
+          .attr("y", 14)
+          .attr("dy", "0.35em")
+          .style("font-size", "15px")
+          .text(series.country);
+      });
     }
+
+    function updateBarChart(selectedYear) {
+      const barSvg = d3.select("#barChart");
+      barSvg.selectAll("*").remove();
+      const margin = {top: 60, right: 160, bottom: 80, left: 100};
+      const w = width - margin.left - margin.right;
+      const h = height - margin.top - margin.bottom;
+      const g = barSvg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const data = co2DataGlobal
+        .filter(d => 
+          +d.year === selectedYear && 
+          d.country && 
+          !isNaN(+d.co2) && 
+          europeanCountries.includes(d.country)
+        )
+        .sort((a, b) => +b.co2 - +a.co2)
+        .slice(0, 5);
+
+      const x = d3.scaleLinear()
+        .domain([0, d3.max(data, d => +d.co2)])
+        .range([0, w]);
+      const y = d3.scaleBand()
+        .domain(data.map(d => d.country))
+        .range([0, h])
+        .padding(0.2);
+
+      g.append("g").call(d3.axisLeft(y).tickSize(0).tickPadding(10));
+      g.append("g")
+        .attr("transform", `translate(0,${h})`)
+        .call(d3.axisBottom(x).ticks(7))
+        .append("text")
+        .attr("x", w)
+        .attr("y", 50)
+        .attr("fill", "#000")
+        .style("text-anchor", "end")
+        .style("font-size", "16px")
+        .text("CO₂ emisije (Mt)");
+
+      g.selectAll(".bar")
+        .data(data)
+        .enter().append("rect")
+        .attr("class", "bar")
+        .attr("y", d => y(d.country))
+        .attr("height", y.bandwidth())
+        .attr("x", 0)
+        .attr("width", d => x(+d.co2))
+        .attr("fill", "#1f77b4")
+        .on("mouseover", (event, d) => {
+          tooltip.transition().duration(200).style("opacity", .9);
+          tooltip.html(`<strong>${d.country}</strong><br>CO₂: ${(+d.co2).toFixed(2)} Mt`)
+            .style("left", (event.pageX + 5) + "px")
+            .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mouseout", () => tooltip.transition().duration(500).style("opacity", 0));
+
+      g.selectAll(".label")
+        .data(data)
+        .enter().append("text")
+        .attr("x", d => x(+d.co2) + 8)
+        .attr("y", d => y(d.country) + y.bandwidth()/2)
+        .attr("dy", "0.35em")
+        .style("font-size", "16px")
+        .text(d => (+d.co2).toFixed(1));
+    }
+
+    function getLatestValue(data, country, param, year) {
+
+      const filtered = data.filter(d => d.country === country && d[param] && !isNaN(+d[param]) && +d.year === +year);
+      if (filtered.length > 0) {
+        let val = +filtered[0][param];
+        if (param === "population") return d3.format(",.0f")(val);
+        if (param === "gdp") return d3.format(",.0f")(val);
+        if (param === "co2") return d3.format(",.2f")(val);
+        if (param === "energy_per_capita") return d3.format(",.0f")(val);
+        return val;
+      }
+ 
+      const all = data.filter(d => d.country === country && d[param] && !isNaN(+d[param]));
+      if (all.length === 0) return "N/A";
+      const latest = all.reduce((a, b) => (+a.year > +b.year ? a : b));
+      let val = +latest[param];
+      if (param === "population") return d3.format(",.0f")(val);
+      if (param === "gdp") return d3.format(",.0f")(val);
+      if (param === "co2") return d3.format(",.2f")(val);
+      if (param === "energy_per_capita") return d3.format(",.0f")(val);
+      return val;
+    }
+
+    function updateBasicComparison() {
+      const c1 = d3.select("#countryLine1").property("value");
+      const c2 = d3.select("#countryLine2").property("value");
+      const year = d3.select("#yearSelect").property("value");
+      const boxHtml = [c1, c2].map(country => `
+        <div class="basic-box">
+          <h3>${country}</h3>
+          ${basicParams.map(p => `
+            <div class="param-row">
+              <span class="param-label">${p.label}</span>
+              <span class="param-value">${getLatestValue(co2DataGlobal, country, p.key, year)}</span>
+            </div>
+          `).join("")}
+        </div>
+      `).join("");
+      d3.select("#basicComparison").html(boxHtml);
+    }
+
+    function startAnimation() {
+      if (isAnimating) return;
+      
+      isAnimating = true;
+      d3.select("#play-animation").text("Zaustavi animaciju");
+      
+      const startYear = +d3.select("#yearSelect").property("value");
+      let currentYear = startYear;
+      
+      animationInterval = setInterval(() => {
+        if (currentYear >= 2020) {
+          stopAnimation();
+          return;
+        }
+        
+        currentYear++;
+        d3.select("#yearSelect").property("value", currentYear);
+        updateMap(currentYear);
+      }, 1000); // 1 sekunda između godina
+    }
+
+    function stopAnimation() {
+      if (!isAnimating) return;
+      
+      clearInterval(animationInterval);
+      isAnimating = false;
+      d3.select("#play-animation").text("Pokreni animaciju");
+    }
+
+    function toggleAnimation() {
+      if (isAnimating) {
+        stopAnimation();
+      } else {
+        startAnimation();
+      }
+    }
+
+    d3.select("#zoom-in").on("click", () => {
+      svgMap.transition().call(zoom.scaleBy, 1.5);
+    });
+    d3.select("#zoom-out").on("click", () => {
+      svgMap.transition().call(zoom.scaleBy, 0.5);
+    });
+    d3.select("#zoom-reset").on("click", resetZoom);
+    d3.select("#play-animation").on("click", toggleAnimation);
 
     Promise.all([
       d3.json("geo/europe.geojson"),
@@ -210,7 +563,7 @@
       geoDataGlobal = geoData;
       co2DataGlobal = co2Data;
 
-      const europeanCountries = geoData.features.map(d => nameMap[d.properties.NAME] || d.properties.NAME);
+      europeanCountries = geoData.features.map(d => nameMap[d.properties.NAME] || d.properties.NAME);
       const validYears = Array.from(new Set(co2Data.map(d => +d.year))).filter(y => y >= 1990 && y <= 2022).sort((a,b)=>a-b);
 
       const yearSelect = d3.select("#yearSelect");
@@ -226,13 +579,26 @@
       const defaultYear = 2010;
       yearSelect.property("value", defaultYear);
       updateMap(defaultYear);
+      updateBarChart(defaultYear);
 
       yearSelect.on("change", function () {
+        if (isAnimating) stopAnimation();
         updateMap(+this.value);
+        updateBarChart(+this.value);
+        updateBasicComparison();
       });
 
-      countryLine1.on("change", () => updateLineChart(countryLine1.property("value"), countryLine2.property("value")));
-      countryLine2.on("change", () => updateLineChart(countryLine1.property("value"), countryLine2.property("value")));
+      countryLine1.on("change", () => {
+        updateLineChart(countryLine1.property("value"), countryLine2.property("value"));
+        updateBasicComparison();
+      });
+      countryLine2.on("change", () => {
+        updateLineChart(countryLine1.property("value"), countryLine2.property("value"));
+        updateBasicComparison();
+      });
+
+      updateLineChart("Germany", "France");
+      updateBasicComparison();
     });
   </script>
 </body>
