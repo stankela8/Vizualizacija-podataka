@@ -143,6 +143,96 @@
       min-width: 50px;
       text-align: center;
     }
+    /* Sidebar panel */
+.country-sidebar {
+  position: fixed;
+  top: 0;
+  right: -500px;
+  width: 500px;
+  height: 100vh;
+  background: white;
+  box-shadow: -5px 0 15px rgba(0,0,0,0.3);
+  transition: right 0.3s ease;
+  z-index: 1000;
+  overflow-y: auto;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.country-sidebar.open {
+  right: 0;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #eee;
+}
+
+.close-sidebar {
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.sidebar-chart {
+  margin-bottom: 30px;
+  background: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.sidebar-chart h3 {
+  margin-top: 0;
+  color: #333;
+  text-align: center;
+}
+
+.sidebar-chart svg {
+  width: 100%;
+  height: 250px;
+}
+
+/* Dodaj u <style> sekciju */
+.sidebar-chart svg {
+  overflow: visible;
+}
+
+.arc path {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.arc path:hover {
+  opacity: 0.8;
+}
+
+.dot {
+  cursor: pointer;
+  transition: r 0.2s;
+}
+
+.dot:hover {
+  r: 6;
+}
+
+.bar {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.bar:hover {
+  opacity: 0.8;
+}
+
   </style>
 </head>
 <body>
@@ -175,7 +265,7 @@
 
   <div class="row">
     <div class="chart-box">
-      <h2>Top 5 emitera CO₂ u odabranoj godini</h2>
+      <h2>5 država sa najvećom emisijom CO₂ u odabranoj godini</h2>
       <svg id="barChart" class="svg-container" viewBox="0 0 900 550" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <div class="chart-box">
@@ -183,6 +273,34 @@
       <div class="basic-comparison-container" id="basicComparison"></div>
     </div>
   </div>
+  <!-- Country Details Sidebar -->
+<div id="countrySidebar" class="country-sidebar">
+  <div class="sidebar-header">
+    <h2 id="selectedCountryName">Detalji države</h2>
+    <button class="close-sidebar" onclick="closeCountrySidebar()">×</button>
+  </div>
+  
+  <div class="sidebar-chart">
+    <h3>Emisije CO₂ po izvorima</h3>
+    <svg id="sourcesPieChart"></svg>
+  </div>
+  
+  <div class="sidebar-chart">
+    <h3>CO₂ per capita kroz godine</h3>
+    <svg id="perCapitaChart"></svg>
+  </div>
+  
+  <div class="sidebar-chart">
+    <h3>Kumulativne emisije</h3>
+    <svg id="cumulativeChart"></svg>
+  </div>
+  
+  <div class="sidebar-chart">
+    <h3>Staklenički plinovi</h3>
+    <svg id="ghgChart"></svg>
+  </div>
+</div>
+
   <script>
   
 // --- 1. Početne postavke i inicijalizacija SVG elemenata ---
@@ -346,6 +464,8 @@ function handleClick(event, d) {
   d3.select("#countryLine1").property("value", name);
   updateLineChart(name, d3.select("#countryLine2").property("value"));
   updateBasicComparison();
+
+  openCountrySidebar(name);
 }
 
 // --- 7. Linijski graf (trend emisija) ---
@@ -633,6 +753,617 @@ Promise.all([
 
   updateLineChart("Albania", "Albania");
   updateBasicComparison();
+});
+
+// Funkcije za sidebar
+function openCountrySidebar(countryName) {
+  d3.select("#selectedCountryName").text(`Detalji: ${countryName}`);
+  d3.select("#countrySidebar").classed("open", true);
+  
+  // Generiraj grafove za odabranu državu
+  updateSourcesPieChart(countryName);
+  updatePerCapitaChart(countryName);
+  updateCumulativeChart(countryName);
+  updateGhgChart(countryName);
+}
+
+function closeCountrySidebar() {
+  d3.select("#countrySidebar").classed("open", false);
+}
+
+// Pie chart 
+function updateSourcesPieChart(country) {
+  const svg = d3.select("#sourcesPieChart");
+  svg.selectAll("*").remove();
+  
+  const currentYear = +d3.select("#yearSelect").property("value");
+  const countryData = co2DataGlobal.find(d => d.country === country && +d.year === currentYear);
+  
+  if (!countryData) {
+    svg.append("text")
+      .attr("x", 225).attr("y", 125)
+      .style("text-anchor", "middle")
+      .style("font-size", "14px")
+      .style("fill", "#666")
+      .text("Nema podataka za odabranu godinu");
+    return;
+  }
+  
+  const sources = [
+    {name: "Ugljen", value: +countryData.coal_co2 || 0, color: "#8B4513"},
+    {name: "Plin", value: +countryData.gas_co2 || 0, color: "#4169E1"},
+    {name: "Nafta", value: +countryData.oil_co2 || 0, color: "#228B22"},
+    {name: "Cement", value: +countryData.cement_co2 || 0, color: "#888888"},
+    {name: "Ostalo", value: +countryData.other_industry_co2 || 0, color: "#FF6347"}
+  ].filter(d => d.value > 0);
+  
+  if (sources.length === 0) {
+    svg.append("text")
+      .attr("x", 225).attr("y", 125)
+      .style("text-anchor", "middle")
+      .style("font-size", "14px")
+      .style("fill", "#666")
+      .text("Nema emisija za prikaz");
+    return;
+  }
+  
+  const width = 450, height = 250;
+  const radius = Math.min(width, height) / 2 - 80; 
+  const g = svg.append("g").attr("transform", `translate(${width/2},${height/2})`);
+  
+  const pie = d3.pie()
+    .value(d => d.value)
+    .sort(null)
+    .padAngle(0.02);
+  
+  const arc = d3.arc()
+    .innerRadius(0)
+    .outerRadius(radius);
+  
+  const outerArc = d3.arc()
+    .innerRadius(radius * 1.5)
+    .outerRadius(radius * 1.5);
+  
+  const arcs = g.selectAll(".arc")
+    .data(pie(sources))
+    .enter().append("g").attr("class", "arc");
+  
+  // Animacija pie segmenata
+  arcs.append("path")
+    .attr("d", arc)
+    .attr("fill", d => d.data.color)
+    .attr("stroke", "white")
+    .attr("stroke-width", 2)
+    .style("opacity", 0)
+    .transition()
+    .duration(800)
+    .delay((d, i) => i * 150)
+    .style("opacity", 1)
+    .attrTween("d", function(d) {
+      const interpolate = d3.interpolate({startAngle: 0, endAngle: 0}, d);
+      return function(t) {
+        return arc(interpolate(t));
+      };
+    });
+  
+  // Anti-collision algoritam za labele
+  setTimeout(() => {
+    const pieData = pie(sources);
+    
+    const labelData = pieData.map(d => {
+      const midangle = d.startAngle + (d.endAngle - d.startAngle) / 2;
+      const pos = outerArc.centroid(d);
+      pos[0] = radius * 1.6 * (midangle < Math.PI ? 1 : -1);
+      return {
+        ...d,
+        midangle: midangle,
+        pos: pos,
+        originalY: pos[1],
+        side: midangle < Math.PI ? 'right' : 'left'
+      };
+    });
+    
+    const leftLabels = labelData.filter(d => d.side === 'left').sort((a, b) => a.pos[1] - b.pos[1]);
+    const rightLabels = labelData.filter(d => d.side === 'right').sort((a, b) => a.pos[1] - b.pos[1]);
+    
+    function avoidCollision(labels) {
+      const minDistance = 20; 
+      
+      for (let i = 1; i < labels.length; i++) {
+        const current = labels[i];
+        const previous = labels[i - 1];
+        
+        if (current.pos[1] - previous.pos[1] < minDistance) {
+          current.pos[1] = previous.pos[1] + minDistance;
+        }
+      }
+      
+      const maxY = height / 2 - 20;
+      const minY = -height / 2 + 20;
+      
+      for (let i = labels.length - 1; i >= 0; i--) {
+        if (labels[i].pos[1] > maxY) {
+          labels[i].pos[1] = maxY - (labels.length - 1 - i) * minDistance;
+        }
+        if (labels[i].pos[1] < minY) {
+          labels[i].pos[1] = minY + i * minDistance;
+        }
+      }
+    }
+    
+   
+    avoidCollision(leftLabels);
+    avoidCollision(rightLabels);
+    
+    const finalLabelData = [...leftLabels, ...rightLabels];
+    
+    // Dodaj linije i labele
+    finalLabelData.forEach((d, i) => {
+      const arcData = arcs.data().find(arcD => arcD.data.name === d.data.name);
+      const arcElement = arcs.filter(arcD => arcD.data.name === d.data.name);
+      
+      const posA = arc.centroid(d); 
+      const posB = outerArc.centroid(d); 
+      const posC = [d.pos[0], d.pos[1]]; 
+      
+      arcElement.append("polyline")
+        .attr("opacity", 0)
+        .attr("stroke", "#666")
+        .attr("stroke-width", 1)
+        .attr("fill", "none")
+        .attr("points", [posA, posB, posC])
+        .transition()
+        .duration(500)
+        .delay(i * 100)
+        .attr("opacity", 0.8);
+      
+      // Label tekst
+      arcElement.append("text")
+        .attr("opacity", 0)
+        .attr("dy", "0.35em")
+        .style("text-anchor", d.side === 'right' ? 'start' : 'end')
+        .attr("transform", `translate(${d.pos[0]}, ${d.pos[1]})`)
+        .style("font-size", "11px")
+        .style("font-weight", "bold")
+        .style("fill", "#333")
+        .text(`${d.data.name}: ${d.data.value.toFixed(1)} Mt`)
+        .transition()
+        .duration(500)
+        .delay(i * 100)
+        .attr("opacity", 1);
+    });
+  }, 1200);
+  
+  // Tooltip na segmente
+  setTimeout(() => {
+    arcs.selectAll("path")
+      .style("cursor", "pointer")
+      .on("mouseover", (event, d) => {
+        const totalValue = d3.sum(sources, s => s.value);
+        const percentage = ((d.data.value / totalValue) * 100).toFixed(1);
+        
+        tooltip.transition().duration(200).style("opacity", .9);
+        tooltip.html(`
+          <strong>${d.data.name}</strong><br>
+          ${d.data.value.toFixed(2)} Mt CO₂<br>
+          ${percentage}% ukupno
+        `)
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 60) + "px");
+        
+        // Highlight effect
+        d3.select(event.currentTarget)
+          .transition()
+          .duration(200)
+          .attr("transform", "scale(1.05)")
+          .style("filter", "brightness(1.1)");
+      })
+      .on("mouseout", (event, d) => {
+        tooltip.transition().duration(500).style("opacity", 0);
+        
+        // Remove highlight
+        d3.select(event.currentTarget)
+          .transition()
+          .duration(200)
+          .attr("transform", "scale(1)")
+          .style("filter", "brightness(1)");
+      });
+  }, 1700);
+}
+
+// Line chart za CO2 per capita
+function updatePerCapitaChart(country) {
+  const svg = d3.select("#perCapitaChart");
+  svg.selectAll("*").remove();
+  
+  const margin = {top: 20, right: 20, bottom: 60, left: 70};
+  const width = 450 - margin.left - margin.right;
+  const height = 250 - margin.top - margin.bottom;
+  
+  const data = co2DataGlobal
+    .filter(d => d.country === country && !isNaN(+d.co2_per_capita) && +d.year >= 1990)
+    .map(d => ({year: +d.year, value: +d.co2_per_capita}))
+    .sort((a, b) => a.year - b.year);
+  
+  if (data.length === 0) {
+    svg.append("text")
+      .attr("x", 225).attr("y", 125)
+      .style("text-anchor", "middle")
+      .style("font-size", "14px")
+      .style("fill", "#666")
+      .text("Nema podataka za CO₂ per capita");
+    return;
+  }
+  
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  
+  const x = d3.scaleLinear().domain(d3.extent(data, d => d.year)).range([0, width]);
+  const y = d3.scaleLinear().domain([0, d3.max(data, d => d.value)]).nice().range([height, 0]);
+  
+  const line = d3.line()
+    .x(d => x(d.year))
+    .y(d => y(d.value))
+    .curve(d3.curveMonotoneX);
+  
+  // Osi s labelima
+  g.append("g")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x).tickFormat(d3.format("d")))
+    .append("text")
+    .attr("x", width / 2)
+    .attr("y", 40)
+    .attr("fill", "black")
+    .style("text-anchor", "middle")
+    .style("font-size", "12px")
+    .text("Godina");
+  
+  g.append("g")
+    .call(d3.axisLeft(y).tickFormat(d => d.toFixed(1) + " t"))
+    .append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("y", -50)
+    .attr("x", -height / 2)
+    .attr("fill", "black")
+    .style("text-anchor", "middle")
+    .style("font-size", "12px")
+    .text("CO₂ per capita (t/osobi)");
+  
+  // Animacija linije
+  const path = g.append("path")
+    .datum(data)
+    .attr("fill", "none")
+    .attr("stroke", "#1f77b4")
+    .attr("stroke-width", 2)
+    .attr("d", line);
+  
+  const totalLength = path.node().getTotalLength();
+  path
+    .attr("stroke-dasharray", totalLength + " " + totalLength)
+    .attr("stroke-dashoffset", totalLength)
+    .transition()
+    .duration(1000)
+    .ease(d3.easeLinear)
+    .attr("stroke-dashoffset", 0);
+
+  // KREIRAJ ili SELEKTIRAJ postojeći tooltip
+  let tooltip = d3.select("#chart-tooltip");
+  if (tooltip.empty()) {
+    tooltip = d3.select("body")
+      .append("div")
+      .attr("id", "chart-tooltip")
+      .style("position", "absolute")
+      .style("padding", "10px")
+      .style("background", "rgba(0, 0, 0, 0.8)")
+      .style("color", "white")
+      .style("border-radius", "5px")
+      .style("pointer-events", "none")
+      .style("font-size", "12px")
+      .style("opacity", 0)
+      .style("z-index", 1000);
+  }
+  
+ 
+  const dots = g.selectAll(".dot")
+    .data(data)
+    .enter().append("circle")
+    .attr("class", "dot")
+    .attr("cx", d => x(d.year))
+    .attr("cy", d => y(d.value))
+    .attr("r", 0) 
+    .attr("fill", "#1f77b4")
+    .attr("stroke", "white")
+    .attr("stroke-width", 1)
+    .style("cursor", "pointer")
+    .on("mouseover", function(event, d) {
+      console.log("Mouseover triggered!", d); 
+      tooltip.transition()
+        .duration(200)
+        .style("opacity", 1);
+      tooltip.html(`
+        <strong>${country}</strong><br>
+        <strong>Godina:</strong> ${d.year}<br>
+        <strong>CO₂:</strong> ${d.value.toFixed(2)} t/osobi
+      `)
+        .style("left", (event.pageX + 10) + "px")
+        .style("top", (event.pageY - 60) + "px");
+    })
+    .on("mouseout", function() {
+      console.log("Mouseout triggered!"); 
+      tooltip.transition()
+        .duration(500)
+        .style("opacity", 0);
+    })
+    .on("mousemove", function(event) {
+      tooltip
+        .style("left", (event.pageX + 10) + "px")
+        .style("top", (event.pageY - 60) + "px");
+    });
+  
+  // ANIMACIJA veličine točaka
+  dots.transition()
+    .duration(300)
+    .delay((d, i) => i * 15 + 1000)
+    .attr("r", 3);
+}
+
+
+// Area chart za kumulativne emisije
+function updateCumulativeChart(country) {
+  const svg = d3.select("#cumulativeChart");
+  svg.selectAll("*").remove();
+  
+  const margin = {top: 20, right: 20, bottom: 60, left: 70};
+  const width = 450 - margin.left - margin.right;
+  const height = 250 - margin.top - margin.bottom;
+  
+  const data = co2DataGlobal
+    .filter(d => d.country === country && !isNaN(+d.cumulative_co2) && +d.year >= 1990)
+    .map(d => ({year: +d.year, value: +d.cumulative_co2}))
+    .sort((a, b) => a.year - b.year);
+  
+  if (data.length === 0) {
+    svg.append("text")
+      .attr("x", 225).attr("y", 125)
+      .style("text-anchor", "middle")
+      .style("font-size", "14px")
+      .style("fill", "#666")
+      .text("Nema podataka za kumulativne emisije");
+    return;
+  }
+  
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  
+  const x = d3.scaleLinear().domain(d3.extent(data, d => d.year)).range([0, width]);
+  const y = d3.scaleLinear().domain([0, d3.max(data, d => d.value)]).nice().range([height, 0]);
+  
+  // Osi s labelima
+  g.append("g")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x).tickFormat(d3.format("d")))
+    .append("text")
+    .attr("x", width / 2)
+    .attr("y", 40)
+    .attr("fill", "black")
+    .style("text-anchor", "middle")
+    .style("font-size", "12px")
+    .text("Godina");
+  
+  g.append("g")
+    .call(d3.axisLeft(y).tickFormat(d => `${d3.format(".1s")(d)}t`))
+    .append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("y", -50)
+    .attr("x", -height / 2)
+    .attr("fill", "black")
+    .style("text-anchor", "middle")
+    .style("font-size", "12px")
+    .text("Kumulativni CO₂ (Mt)");
+  
+  const area = d3.area()
+    .x(d => x(d.year))
+    .y0(height)
+    .y1(d => y(d.value))
+    .curve(d3.curveMonotoneX);
+  
+  // Animacija area-e
+  const areaPath = g.append("path")
+    .datum(data)
+    .attr("fill", "rgba(31, 119, 180, 0.3)")
+    .attr("stroke", "#1f77b4")
+    .attr("stroke-width", 2)
+    .attr("d", area);
+  
+  // Mask za animaciju
+  const maskId = "mask-" + Math.random().toString(36).substr(2, 9);
+  const mask = svg.append("defs")
+    .append("mask")
+    .attr("id", maskId);
+  
+  mask.append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", 0)
+    .attr("height", height + margin.top + margin.bottom)
+    .attr("fill", "white")
+    .transition()
+    .duration(2500)
+    .attr("width", width + margin.left + margin.right);
+  
+  areaPath.attr("mask", `url(#${maskId})`);
+}
+
+// Horizontal bar chart za stakleničke plinove
+function updateGhgChart(country) {
+  const svg = d3.select("#ghgChart");
+  svg.selectAll("*").remove();
+  
+  const currentYear = +d3.select("#yearSelect").property("value");
+  const countryData = co2DataGlobal.find(d => d.country === country && +d.year === currentYear);
+  
+  if (!countryData) {
+    svg.append("text")
+      .attr("x", 225).attr("y", 125)
+      .style("text-anchor", "middle")
+      .style("font-size", "14px")
+      .style("fill", "#666")
+      .text("Nema podataka za stakleničke plinove");
+    return;
+  }
+  
+  const ghgData = [
+    {name: "CO₂", value: +countryData.co2 || 0, color: "#1f77b4", unit: "Mt"},
+    {name: "Metan", value: (+countryData.methane || 0), color: "#ff7f0e", unit: "Mt CO₂-ekv"},
+    {name: "N₂O", value: (+countryData.nitrous_oxide || 0), color: "#2ca02c", unit: "Mt CO₂-ekv"}
+  ].filter(d => d.value > 0);
+  
+  if (ghgData.length === 0) {
+    svg.append("text")
+      .attr("x", 225).attr("y", 125)
+      .style("text-anchor", "middle")
+      .style("font-size", "14px")
+      .style("fill", "#666")
+      .text("Nema podataka o plinovima");
+    return;
+  }
+  
+  const margin = {top: 20, right: 100, bottom: 60, left: 100}; 
+  const width = 450 - margin.left - margin.right;
+  const height = 250 - margin.top - margin.bottom;
+  
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  
+  
+  const maxValue = d3.max(ghgData, d => d.value);
+  const x = d3.scaleLinear()
+    .domain([0, maxValue * 1.1]) 
+    .range([0, width]);
+  
+  const y = d3.scaleBand()
+    .domain(ghgData.map(d => d.name))
+    .range([0, height])
+    .padding(0.3);
+  
+  
+  g.append("g")
+    .call(d3.axisLeft(y).tickSize(0).tickPadding(10))
+    .selectAll("text")
+    .style("font-size", "12px")
+    .style("font-weight", "bold");
+  
+  // X os s pametnijim formatiranjem ovisno o veličini brojeva
+  let tickFormat;
+  if (maxValue > 1000) {
+    tickFormat = d => (d / 1000).toFixed(1) + "k"; // Za velike brojeve
+  } else if (maxValue > 100) {
+    tickFormat = d => d.toFixed(0); 
+  } else {
+    tickFormat = d => d.toFixed(1); 
+  }
+  
+  g.append("g")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x)
+      .ticks(5) // Samo 5 tick-ova da nije zakrčeno
+      .tickFormat(tickFormat)
+    )
+    .selectAll("text")
+    .style("font-size", "11px");
+  
+  // Label za X os
+  g.append("text")
+    .attr("x", width / 2)
+    .attr("y", height + 45)
+    .attr("fill", "black")
+    .style("text-anchor", "middle")
+    .style("font-size", "12px")
+    .style("font-weight", "bold")
+    .text("Emisije (Mt CO₂-ekvivalent)");
+  
+  // Animacija stupaca
+  const bars = g.selectAll(".bar")
+    .data(ghgData)
+    .enter().append("rect")
+    .attr("class", "bar")
+    .attr("y", d => y(d.name))
+    .attr("height", y.bandwidth())
+    .attr("x", 0)
+    .attr("width", 0)
+    .attr("fill", d => d.color)
+    .attr("rx", 3) 
+    .style("cursor", "pointer")
+    .transition()
+    .duration(800)
+    .delay((d, i) => i * 200)
+    .attr("width", d => x(d.value));
+  
+ 
+  setTimeout(() => {
+    g.selectAll(".label")
+      .data(ghgData)
+      .enter().append("text")
+      .attr("class", "label")
+      .attr("x", d => x(d.value) + 8)
+      .attr("y", d => y(d.name) + y.bandwidth()/2)
+      .attr("dy", "0.35em")
+      .style("font-size", "11px")
+      .style("font-weight", "bold")
+      .style("fill", "#333")
+      .style("opacity", 0)
+      .text(d => {
+        // Pametniji prikaz brojeva
+        if (d.value >= 1000) {
+          return `${(d.value/1000).toFixed(1)}k Mt`;
+        } else if (d.value >= 100) {
+          return `${d.value.toFixed(0)} Mt`;
+        } else {
+          return `${d.value.toFixed(1)} Mt`;
+        }
+      })
+      .transition()
+      .duration(400)
+      .style("opacity", 1);
+  }, 1000);
+  
+  // Tooltip s detaljnijim informacijama
+  setTimeout(() => {
+    g.selectAll(".bar")
+      .on("mouseover", (event, d) => {
+        // Highlight bar
+        d3.select(event.currentTarget)
+          .transition()
+          .duration(200)
+          .style("opacity", 0.8)
+          .attr("stroke", "#333")
+          .attr("stroke-width", 2);
+          
+        tooltip.transition().duration(200).style("opacity", .9);
+        tooltip.html(`
+          <strong>${d.name}</strong><br>
+          <strong>Emisije:</strong> ${d.value.toFixed(2)} Mt<br>
+          <strong>Godina:</strong> ${currentYear}<br>
+          <strong>Država:</strong> ${country}
+        `)
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 70) + "px");
+      })
+      .on("mouseout", (event, d) => {
+        // Remove highlight
+        d3.select(event.currentTarget)
+          .transition()
+          .duration(200)
+          .style("opacity", 1)
+          .attr("stroke", "none");
+          
+        tooltip.transition().duration(500).style("opacity", 0);
+      });
+  }, 1000);
+}
+
+// Event listener za zatvaranje na ESC
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') {
+    closeCountrySidebar();
+  }
 });
 
   </script>
